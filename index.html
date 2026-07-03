@@ -58,6 +58,11 @@
     .panel-head h2{margin:0;font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
     #panel.collapsed .panel-head{padding:10px 12px}
     #collapseBtn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+    .panel-head .actions{display:flex;align-items:center;gap:7px}
+    #resetBtn{background:none;border:1px solid var(--stroke);color:var(--muted);font-size:10px;font-weight:700;
+      text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:6px;cursor:pointer;transition:.15s}
+    #resetBtn:hover{color:var(--text);border-color:var(--muted)}
+    #panel.collapsed #resetBtn{display:none}
     .panel-body{margin-top:12px;display:flex;flex-direction:column;gap:13px}
     .field{display:flex;flex-direction:column;gap:5px}
     .field label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
@@ -86,10 +91,17 @@
     .seg button.active{background:var(--accent);color:#111}
     .hint{font-size:11px;color:var(--muted);line-height:1.4}
     .divider{height:1px;background:var(--stroke);margin:2px 0}
+    .adv{border:1px solid var(--stroke);border-radius:10px;padding:0 11px;background:rgba(255,255,255,.02)}
+    .adv summary{cursor:pointer;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+      color:var(--muted);padding:11px 0;list-style:none;outline:none}
+    .adv summary::-webkit-details-marker{display:none}
+    .adv summary::before{content:'▸';color:var(--accent);margin-right:6px;display:inline-block}
+    .adv[open] summary::before{content:'▾'}
+    .adv-body{display:flex;flex-direction:column;gap:12px;padding-bottom:12px}
 
     /* ---- bottom HUD: stats + playback + elevation ---- */
     #hud{
-      position:absolute;left:16px;right:16px;bottom:16px;z-index:6;
+      position:absolute;left:16px;right:332px;bottom:16px;z-index:6; /* clear the 300px panel + margins */
       display:flex;flex-direction:column;gap:10px;pointer-events:none;
     }
     #hud .card{background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
@@ -135,6 +147,7 @@
 
     @media(max-width:640px){
       #panel{width:calc(100vw - 32px)}
+      #hud{right:16px}   /* panel is full-width at the top on mobile; HUD spans full width */
       #brand .rt-title{max-width:40vw}
       .stat{min-width:82px}
     }
@@ -154,7 +167,10 @@
   <div id="panel">
     <div class="panel-head" id="panelHead">
       <h2>Flyover controls</h2>
-      <button id="collapseBtn" title="Collapse">▾</button>
+      <div class="actions">
+        <button id="resetBtn" title="Reset all settings to defaults">Reset</button>
+        <button id="collapseBtn" title="Collapse">▾</button>
+      </div>
     </div>
     <div class="panel-body">
       <div class="field">
@@ -206,6 +222,17 @@
       <div class="divider"></div>
 
       <div class="field">
+        <label for="zoomSel">Zoom level</label>
+        <select id="zoomSel">
+          <option value="street">Street-level (very close)</option>
+          <option value="close">Close</option>
+          <option value="medium" selected>Medium</option>
+          <option value="wide">Wide</option>
+          <option value="birds">Bird's-eye (overview)</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="field">
         <label for="heightInp">Camera height <span class="val" id="heightVal">320 m</span></label>
         <input type="range" id="heightInp" min="80" max="2500" step="10" value="320" />
       </div>
@@ -221,7 +248,7 @@
       <div class="divider"></div>
 
       <div class="toggles">
-        <div class="toggle">Place labels
+        <div class="toggle">Map labels
           <label class="switch"><input type="checkbox" id="labelsChk" checked><span class="slider"></span></label></div>
         <div class="toggle">3D buildings / trees
           <label class="switch"><input type="checkbox" id="objChk" checked><span class="slider"></span></label></div>
@@ -236,6 +263,43 @@
           <button data-u="imperial">mi</button>
         </div>
       </div>
+
+      <details class="adv">
+        <summary>Advanced — cinematic</summary>
+        <div class="adv-body">
+          <div class="field">
+            <label for="pacingSel">Pacing</label>
+            <select id="pacingSel">
+              <option value="even" selected>Even speed</option>
+              <option value="time">Match recorded GPS pace</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="smoothInp">Camera smoothing <span class="val" id="smoothVal">0</span></label>
+            <input type="range" id="smoothInp" min="0" max="0.9" step="0.05" value="0" />
+          </div>
+          <div class="field">
+            <label for="aheadInp">Look-ahead <span class="val" id="aheadVal">0 m</span></label>
+            <input type="range" id="aheadInp" min="0" max="800" step="10" value="0" />
+          </div>
+          <div class="field">
+            <label for="orbitInp">Orbit drift <span class="val" id="orbitVal">0°</span></label>
+            <input type="range" id="orbitInp" min="-180" max="180" step="5" value="0" />
+          </div>
+          <div class="divider"></div>
+          <div class="toggle">Atmospheric haze
+            <label class="switch"><input type="checkbox" id="fogChk" checked><span class="slider"></span></label></div>
+          <div class="field">
+            <label for="hazeInp">Haze intensity <span class="val" id="hazeVal">0.40</span></label>
+            <input type="range" id="hazeInp" min="0" max="1" step="0.05" value="0.4" />
+          </div>
+          <div class="divider"></div>
+          <div class="toggle">Ease in / out
+            <label class="switch"><input type="checkbox" id="easeChk" checked><span class="slider"></span></label></div>
+          <div class="toggle">Lock map while playing
+            <label class="switch"><input type="checkbox" id="lockChk" checked><span class="slider"></span></label></div>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -306,6 +370,15 @@ const STYLES = {
   'satellite-streets':  { url:'mapbox://styles/mapbox/satellite-streets-v12', label:'Satellite Streets (classic)',          standard:false },
 };
 
+// zoom-level presets → camera height (m above ground) + follow distance (m behind)
+const ZOOM_PRESETS = {
+  street: { height:120,  follow:90  },
+  close:  { height:220,  follow:170 },
+  medium: { height:320,  follow:260 },
+  wide:   { height:650,  follow:480 },
+  birds:  { height:1400, follow:900 },
+};
+
 // default base style + terrain exaggeration seed by route type
 const TYPE_DEFAULTS = {
   mountain: { style:'standard-satellite', exag:1.7 },
@@ -315,6 +388,14 @@ const TYPE_DEFAULTS = {
 };
 
 // ---- 3. STATE -------------------------------------------------------------
+const DEFAULT_CFG = {
+  color:'#FFD200', width:6, exag:1.4,
+  height:320, follow:260, speed:1,
+  light:'day', labels:true, objects:true,
+  // advanced / cinematic
+  pacing:'even', smoothing:0, lookAhead:0, orbit:0, fog:true, haze:0.4,
+  ease:true, lockInteraction:true,
+};
 const state = {
   route: null,            // { feature, coords, elevations, times, lengthKm, stats, bbox }
   styleKey: 'standard-satellite',
@@ -328,12 +409,11 @@ const state = {
   headMarker: null,
   startMarker: null,
   finishMarker: null,
-  cfg: {
-    color:'#FFD200', width:6, exag:1.4,
-    height:320, follow:260, speed:1,
-    light:'day', labels:true, objects:true,
-  },
+  _cam: null,               // previous smoothed camera state (for LERP)
+  cfg: {...DEFAULT_CFG},
 };
+const lerp = (a,b,t)=> a + (b-a)*t;
+const easeInOutQuad = t=> t<0.5 ? 2*t*t : (4-2*t)*t - 1;   // smooth accel/decel (matches Mapbox example)
 
 // ---- 4. MAP INIT ----------------------------------------------------------
 const map = new mapboxgl.Map({
@@ -346,12 +426,20 @@ const map = new mapboxgl.Map({
 });
 map.addControl(new mapboxgl.NavigationControl({visualizePitch:true}), 'bottom-left');
 
+// enable/disable user gesture handlers (used to lock the camera during playback)
+function setInteractive(on){
+  ['dragPan','scrollZoom','boxZoom','dragRotate','keyboard','doubleClickZoom','touchZoomRotate'].forEach(h=>{
+    if(map[h]) map[h][on?'enable':'disable']();
+  });
+}
+
 map.on('style.load', onStyleLoad);
 map.on('error', (e)=>console.warn('map error:', e && e.error && e.error.message));
 
 function onStyleLoad(){
   addTerrain();
   applyBasemapConfig();
+  applyFog();
   if(state.route){ addRouteLayers(); }
   const cb = state.pendingAfterStyle; state.pendingAfterStyle = null;
   if(cb) cb(); else if(state.route) renderAt(state.phase);
@@ -371,10 +459,28 @@ function applyBasemapConfig(){
   if(!STYLES[state.styleKey].standard) return; // classic styles have no basemap import
   try{
     map.setConfigProperty('basemap','lightPreset', state.cfg.light);
-    map.setConfigProperty('basemap','showPlaceLabels', state.cfg.labels);
-    map.setConfigProperty('basemap','showPointOfInterestLabels', state.cfg.labels);
+    // one toggle drives every label type for a clean, cinematic look
+    ['showPlaceLabels','showPointOfInterestLabels','showRoadLabels','showTransitLabels','showPedestrianRoads']
+      .forEach(k=> map.setConfigProperty('basemap', k, state.cfg.labels));
     map.setConfigProperty('basemap','show3dObjects', state.cfg.objects);
   }catch(e){ /* config not ready on some styles */ }
+}
+
+// atmospheric depth haze (setFog) — colours track the light preset
+function applyFog(){
+  try{
+    if(!state.cfg.fog){ map.setFog(null); return; }
+    const night = state.cfg.light==='night', dim = state.cfg.light==='dusk'||state.cfg.light==='dawn';
+    const h = state.cfg.haze;
+    map.setFog({
+      'range':[1.5, 12 - h*6],
+      'horizon-blend': 0.05 + h*0.35,
+      'color':       night?'#10151f':(dim?'#e7cdb6':'#cfe0ee'),
+      'high-color':  night?'#0b1a33':(dim?'#c98a5a':'#7fb2e6'),
+      'space-color': night?'#01030a':(dim?'#20304f':'#0a1a3f'),
+      'star-intensity': night?0.55:(dim?0.15:0.0),
+    });
+  }catch(e){ /* fog unsupported on this style */ }
 }
 
 // ---- 5. GPX PARSING -------------------------------------------------------
@@ -430,10 +536,25 @@ function buildRoute(parsed, title, type){
     for(let i=1;i<sm.length;i++){ const d=sm[i]-sm[i-1]; if(d>0) gain+=d; }
   }
 
+  // cumulative distance (km) per point + normalised time fraction per point
+  // (drives look-ahead framing and "match GPS pace" playback)
+  const cumDist=[0];
+  for(let i=1;i<coords.length;i++){
+    cumDist.push(cumDist[i-1] + turf.distance(turf.point(coords[i-1]), turf.point(coords[i]), {units:'kilometers'}));
+  }
+  let timeFrac=null;
+  const firstT=parsed.times.find(t=>isFinite(t));
+  const lastT=[...parsed.times].reverse().find(t=>isFinite(t));
+  if(isFinite(firstT) && isFinite(lastT) && lastT>firstT){
+    const span=lastT-firstT; let last=0;
+    timeFrac=parsed.times.map(t=>{ if(isFinite(t)) last=(t-firstT)/span; return last; });
+  }
+  const totalKm = cumDist[cumDist.length-1] || lengthKm;
+
   return {
     feature, coords, elevations:eles, times:parsed.times,
-    lengthKm, bbox, title, type,
-    stats:{ distanceKm:lengthKm, durationMs, gainM:gain, minEle:min, maxEle:max },
+    lengthKm: totalKm, bbox, title, type, cumDist, timeFrac,
+    stats:{ distanceKm:totalKm, durationMs, gainM:gain, minEle:min, maxEle:max },
   };
 }
 
@@ -454,14 +575,20 @@ async function selectRouteByFile(file){
   }
 }
 
-function loadRoute(route){
-  state.route = route;
-  // seed adaptive terrain + default style from type/relief
+// adaptive terrain exaggeration seed from route type + relief
+function seedExag(route){
   const def = TYPE_DEFAULTS[route.type] || TYPE_DEFAULTS.outdoor;
   const eleRange = route.stats.maxEle - route.stats.minEle;
   let exag = def.exag;
   if(route.type!=='city'){ if(eleRange>700) exag=Math.max(exag,1.9); else if(eleRange<120) exag=Math.min(exag,1.1); }
-  setExag(exag);
+  return exag;
+}
+
+function loadRoute(route){
+  state.route = route;
+  // seed adaptive terrain + default style from type/relief
+  const def = TYPE_DEFAULTS[route.type] || TYPE_DEFAULTS.outdoor;
+  setExag(seedExag(route));
 
   // UI: title + badge + stats + elevation profile
   document.getElementById('routeTitle').textContent = route.title;
@@ -542,32 +669,69 @@ function durationMs(){
   return base / state.cfg.speed;
 }
 
+// map an animation phase (0..1) to a distance along the route (km).
+// "even" = constant speed; "time" = follow the recorded GPS timestamps.
+function phaseToDist(phase){
+  const r=state.route, total=r.lengthKm;
+  if(state.cfg.pacing!=='time' || !r.timeFrac) return phase*total;
+  if(phase<=0) return 0; if(phase>=1) return total;
+  const tf=r.timeFrac, cd=r.cumDist;
+  let lo=0, hi=tf.length-1;
+  while(lo<hi){ const mid=(lo+hi)>>1; if(tf[mid]<phase) lo=mid+1; else hi=mid; }
+  const i=lo, i0=Math.max(0,i-1);
+  const f=(tf[i]>tf[i0]) ? (phase-tf[i0])/(tf[i]-tf[i0]) : 0;
+  return cd[i0] + (cd[i]-cd[i0])*f;
+}
+
 // place camera & reveal trail for a given phase 0..1
 function renderAt(phase){
   if(!state.route) return;
   phase = Math.min(1, Math.max(0, phase));
+  const p = state.cfg.ease ? easeInOutQuad(phase) : phase;   // ease-in/out (motion), scrubber stays linear
+  const feat = state.route.feature;
   const total = state.route.lengthKm;
   const followKm = state.cfg.follow/1000;
-  const tgtDist = phase*total;
-  const camDist = Math.max(0, tgtDist - followKm);
-  const tgt = turf.along(state.route.feature, tgtDist, {units:'kilometers'}).geometry.coordinates;
-  const camPt = turf.along(state.route.feature, camDist, {units:'kilometers'}).geometry.coordinates;
+  const aheadKm = state.cfg.lookAhead/1000;
+
+  const centerDist = phaseToDist(p);               // where we currently are
+  const camDist = Math.max(0, centerDist - followKm);
+  const tgtDist = Math.min(total, centerDist + aheadKm);
+  const center = turf.along(feat, centerDist, {units:'kilometers'}).geometry.coordinates;
+  let tgt = turf.along(feat, tgtDist, {units:'kilometers'}).geometry.coordinates;
+  let camPt = turf.along(feat, camDist, {units:'kilometers'}).geometry.coordinates;
+
+  // orbit drift: rotate the camera around the current point for a cinematic sweep
+  if(state.cfg.orbit){
+    camPt = turf.transformRotate(turf.point(camPt), state.cfg.orbit*p, {pivot: turf.point(center)}).geometry.coordinates;
+  }
 
   let ground = 0;
   try{ const g = map.queryTerrainElevation({lng:camPt[0],lat:camPt[1]}, {exaggerated:true}); if(isFinite(g)) ground = g; }catch(e){}
+  let alt = ground + state.cfg.height;
+
+  // LERP smoothing between frames (bypassed while paused/scrubbing for responsiveness)
+  const S = state.cfg.smoothing;
+  if(state.playing && S>0 && state._cam){
+    const amt = Math.max(0.03, 1-S);
+    camPt = [ lerp(state._cam.clng, camPt[0], amt), lerp(state._cam.clat, camPt[1], amt) ];
+    tgt   = [ lerp(state._cam.tlng, tgt[0],   amt), lerp(state._cam.tlat, tgt[1],   amt) ];
+    alt   =   lerp(state._cam.alt,  alt,       amt);
+  }
+  state._cam = { clng:camPt[0], clat:camPt[1], alt, tlng:tgt[0], tlat:tgt[1] };
 
   const cam = map.getFreeCameraOptions();
-  cam.position = mapboxgl.MercatorCoordinate.fromLngLat({lng:camPt[0],lat:camPt[1]}, ground + state.cfg.height);
+  cam.position = mapboxgl.MercatorCoordinate.fromLngLat({lng:camPt[0],lat:camPt[1]}, alt);
   cam.lookAtPoint({lng:tgt[0],lat:tgt[1]});
   map.setFreeCameraOptions(cam);
 
-  // reveal trail [0, phase]  → trim (hide) [phase, 1]
-  const trim = [Math.min(0.9999, phase), 1];
+  // reveal trail up to the current position → trim (hide) the rest
+  const df = Math.min(0.9999, total? centerDist/total : p);
+  const trim = [df, 1];
   if(map.getLayer('route-main'))   map.setPaintProperty('route-main','line-trim-offset', trim);
   if(map.getLayer('route-casing')) map.setPaintProperty('route-casing','line-trim-offset', trim);
 
-  if(state.headMarker) state.headMarker.setLngLat(tgt);
-  updateElevationCursor(phase);
+  if(state.headMarker) state.headMarker.setLngLat(center);
+  updateElevationCursor(df);
 }
 
 function tick(ts){
@@ -587,7 +751,9 @@ function tick(ts){
 
 function setPlaying(on){
   state.playing = on; state.lastTs = null;
+  if(on) state._cam = null;   // avoid smoothing from a stale camera position
   if(state.raf){ cancelAnimationFrame(state.raf); state.raf=null; }
+  setInteractive(!(on && state.cfg.lockInteraction));   // lock gestures during scripted playback
   const icon = document.getElementById('playIcon');
   icon.innerHTML = on ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>' : '<path d="M7 5v14l12-7z"/>';
   if(on){ if(state.phase>=1) state.phase=0; state.raf = requestAnimationFrame(tick); }
@@ -696,11 +862,65 @@ widthInp.addEventListener('input', e=>{ state.cfg.width=+e.target.value; documen
 document.getElementById('exagInp').addEventListener('input', e=> setExag(e.target.value));
 
 const heightInp=document.getElementById('heightInp');
-heightInp.addEventListener('input', e=>{ state.cfg.height=+e.target.value; document.getElementById('heightVal').textContent=(+e.target.value)+' m'; if(!state.playing) renderAt(state.phase); });
 const followInp=document.getElementById('followInp');
-followInp.addEventListener('input', e=>{ state.cfg.follow=+e.target.value; document.getElementById('followVal').textContent=(+e.target.value)+' m'; if(!state.playing) renderAt(state.phase); });
+const zoomSel=document.getElementById('zoomSel');
+function setHeight(v){ state.cfg.height=+v; heightInp.value=v; document.getElementById('heightVal').textContent=(+v)+' m'; }
+function setFollow(v){ state.cfg.follow=+v; followInp.value=v; document.getElementById('followVal').textContent=(+v)+' m'; }
+function applyZoomPreset(key){ const p=ZOOM_PRESETS[key]; if(!p) return; setHeight(p.height); setFollow(p.follow); if(!state.playing) renderAt(state.phase); }
+zoomSel.addEventListener('change', e=>{ if(e.target.value!=='custom') applyZoomPreset(e.target.value); });
+heightInp.addEventListener('input', e=>{ setHeight(e.target.value); zoomSel.value='custom'; if(!state.playing) renderAt(state.phase); });
+followInp.addEventListener('input', e=>{ setFollow(e.target.value); zoomSel.value='custom'; if(!state.playing) renderAt(state.phase); });
 const speedInp=document.getElementById('speedInp');
 speedInp.addEventListener('input', e=>{ state.cfg.speed=+e.target.value; document.getElementById('speedVal').textContent=(+e.target.value).toFixed(2).replace(/0$/,'')+'×'; });
+
+// advanced / cinematic
+const reRender=()=>{ if(!state.playing) renderAt(state.phase); };
+document.getElementById('pacingSel').addEventListener('change', e=>{ state.cfg.pacing=e.target.value; reRender(); });
+document.getElementById('smoothInp').addEventListener('input', e=>{ state.cfg.smoothing=+e.target.value; document.getElementById('smoothVal').textContent=(+e.target.value).toFixed(2).replace(/^0\.?0?$/,'0'); });
+document.getElementById('aheadInp').addEventListener('input', e=>{ state.cfg.lookAhead=+e.target.value; document.getElementById('aheadVal').textContent=(+e.target.value)+' m'; reRender(); });
+document.getElementById('orbitInp').addEventListener('input', e=>{ state.cfg.orbit=+e.target.value; document.getElementById('orbitVal').textContent=(+e.target.value)+'°'; reRender(); });
+document.getElementById('fogChk').addEventListener('change', e=>{ state.cfg.fog=e.target.checked; applyFog(); });
+document.getElementById('hazeInp').addEventListener('input', e=>{ state.cfg.haze=+e.target.value; document.getElementById('hazeVal').textContent=(+e.target.value).toFixed(2); applyFog(); });
+document.getElementById('easeChk').addEventListener('change', e=>{ state.cfg.ease=e.target.checked; reRender(); });
+document.getElementById('lockChk').addEventListener('change', e=>{ state.cfg.lockInteraction=e.target.checked; setInteractive(!(state.playing && state.cfg.lockInteraction)); });
+
+// which zoom preset (if any) matches the current height + follow distance
+function zoomKeyFor(h,f){ for(const [k,p] of Object.entries(ZOOM_PRESETS)){ if(p.height===h && p.follow===f) return k; } return 'custom'; }
+
+// push state.cfg (+ units/loop) into every control + its readout
+function syncUI(){
+  const c=state.cfg;
+  document.getElementById('lightSel').value=c.light;
+  document.getElementById('labelsChk').checked=c.labels;
+  document.getElementById('objChk').checked=c.objects;
+  document.getElementById('loopChk').checked=state.loop;
+  colorInp.value=c.color;
+  widthInp.value=c.width; document.getElementById('widthVal').textContent=(+c.width).toFixed(1).replace(/\.0$/,'');
+  setExag(c.exag);
+  setHeight(c.height); setFollow(c.follow); zoomSel.value=zoomKeyFor(c.height,c.follow);
+  speedInp.value=c.speed; document.getElementById('speedVal').textContent=(+c.speed).toFixed(2).replace(/0$/,'')+'×';
+  document.getElementById('pacingSel').value=c.pacing;
+  document.getElementById('smoothInp').value=c.smoothing; document.getElementById('smoothVal').textContent=(+c.smoothing).toFixed(2);
+  document.getElementById('aheadInp').value=c.lookAhead; document.getElementById('aheadVal').textContent=c.lookAhead+' m';
+  document.getElementById('orbitInp').value=c.orbit; document.getElementById('orbitVal').textContent=c.orbit+'°';
+  document.getElementById('fogChk').checked=c.fog;
+  document.getElementById('easeChk').checked=c.ease;
+  document.getElementById('lockChk').checked=c.lockInteraction;
+  document.getElementById('hazeInp').value=c.haze; document.getElementById('hazeVal').textContent=(+c.haze).toFixed(2);
+  [...document.getElementById('unitSeg').children].forEach(b=>b.classList.toggle('active', b.dataset.u===state.units));
+}
+
+function resetConfig(){
+  state.cfg={...DEFAULT_CFG}; state.units='metric'; state.loop=true;
+  if(state.route) state.cfg.exag=seedExag(state.route);   // keep the smart per-route terrain default
+  syncUI();
+  applyLineStyle(); applyFog(); applyBasemapConfig();
+  setInteractive(!(state.playing && state.cfg.lockInteraction));
+  renderStats();
+  if(!state.playing) renderAt(state.phase);
+  toast('Settings reset to defaults');
+}
+document.getElementById('resetBtn').addEventListener('click', e=>{ e.stopPropagation(); resetConfig(); });
 
 document.getElementById('playBtn').addEventListener('click', ()=> setPlaying(!state.playing));
 document.getElementById('restartBtn').addEventListener('click', ()=>{ state.phase=0; renderAt(0); updateScrub(); setPlaying(true); });

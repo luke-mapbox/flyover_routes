@@ -80,12 +80,26 @@ Then open **http://localhost:8000**.
 | **Light / time of day** | Dawn / day / dusk / night (Standard `lightPreset`). |
 | **Route colour + width** | Trail colour (with quick swatches, incl. Relive yellow) and thickness. |
 | **Terrain exaggeration** | Vertical relief multiplier. Auto-seeded higher for mountainous routes. |
-| **Camera height / follow distance** | How high above ground and how far behind the moving point the camera sits (together these set the effective tilt). |
+| **Zoom level** | Camera-distance preset (Street-level → Bird's-eye) that sets height + follow distance together. Nudging the fine sliders switches it to "Custom". |
+| **Camera height / follow distance** | Fine control of how high above ground and how far behind the moving point the camera sits (together these set the effective tilt). |
 | **Flyover speed** | Playback speed multiplier (route length also scales the duration). |
-| **Place labels / 3D objects** | Toggle Standard place labels and 3D buildings/trees. |
+| **Map labels / 3D objects** | Toggle **all** Standard labels (place, POI, road, transit, pedestrian) for a clean cinematic look, and 3D buildings/trees. |
 | **Loop** | Restart the flyover automatically when it finishes. |
 | **Units** | Switch stats between km and mi. |
 | **Transport bar** | Scrub, restart, and play/pause; the elevation profile cursor follows along. |
+| **Reset** (panel header) | Restores every setting to its default in one click. Keeps your current route and base-map selection, and re-seeds the smart per-route terrain exaggeration (so an alpine route resets to its higher relief, not a flat default). |
+
+### Advanced — cinematic (expandable)
+
+| Control | What it does |
+|---|---|
+| **Pacing** | *Even speed* (constant) or *Match recorded GPS pace* — replays the route at the actual recorded speed using the GPX timestamps (fast on descents, slow on climbs). |
+| **Camera smoothing** | LERP between frames to damp jitter from noisy GPS/terrain — higher = smoother, more floaty. Bypassed while scrubbing. |
+| **Look-ahead** | Aims the camera a set distance *ahead* of the current point, so it leads into corners instead of staring straight down at the trail. |
+| **Orbit drift** | Rotates the camera around the moving point across the flyover for a sweeping, drone-like reveal. |
+| **Atmospheric haze** | `setFog`-based depth haze whose colour follows the light preset (incl. stars at night); intensity is adjustable. |
+| **Ease in / out** | `easeInOutQuad` easing so the flyover accelerates smoothly from the start and decelerates into the finish (the scrubber still tracks linear time). On by default. |
+| **Lock map while playing** | Disables drag/zoom/rotate gestures during playback so a stray gesture can't fight the scripted camera; re-enabled when paused. On by default. |
 
 ---
 
@@ -103,17 +117,22 @@ Everything lives in **`index.html`** — no build step. Mapbox GL JS and
    accumulated as thousands of phantom metres while real climbs are preserved.
 3. **Map + terrain** — Mapbox `standard` / `standard-satellite` styles on a
    globe projection; a `mapbox-dem` raster-DEM source drives `setTerrain` with
-   the exaggeration slider. Standard config (`lightPreset`, label & 3D toggles)
-   is applied via `setConfigProperty('basemap', …)`.
+   the exaggeration slider. Standard config is applied via
+   `setConfigProperty('basemap', …)` — `lightPreset`, `show3dObjects`, and one
+   labels toggle that drives every label type (place, POI, road, transit,
+   pedestrian) for a clean cinematic look. Atmospheric haze uses `setFog`.
 4. **Route layers** — a GeoJSON source (`lineMetrics: true`) with three line
    layers: faint full-route ghost, dark casing, and the bright trail. The trail
    and casing use `line-trim-offset` to reveal only the travelled portion.
 5. **Flyover** (`renderAt(phase)` + a `requestAnimationFrame` loop) — for each
-   progress `phase ∈ [0,1]` it places the target and camera points along the
-   route (`turf.along`), positions the free camera above the terrain, aims it at
-   the target, and updates the trail trim, head marker, and elevation cursor.
+   progress `phase ∈ [0,1]` (optionally shaped by an `easeInOutQuad` curve) it
+   places the target and camera points along the route (`turf.along`), positions
+   the free camera above the terrain, aims it at the target, and updates the trail
+   trim, head marker, and elevation cursor. During playback `setInteractive(false)`
+   locks map gestures so they can't fight the scripted camera.
 6. **UI** — the config panel and HUD are plain DOM; changes update `state.cfg`
-   and re-apply live.
+   and re-apply live. Defaults live in one `DEFAULT_CFG` object; **Reset** restores
+   from it and `syncUI()` pushes the whole config back into every control.
 
 ### Adding / changing routes
 
