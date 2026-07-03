@@ -1,0 +1,5 @@
+# Local Mapbox token — never commit
+config.js
+
+# OS cruft
+.DS_Store

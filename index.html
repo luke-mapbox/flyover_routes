@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Flyover — Route Visualiser</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+  <!-- Local, git-ignored token file: copy config.example.js -> config.js and paste your pk.* token.
+       The 404 is harmless if it's missing (you can also use ?access_token=… or localStorage). -->
+  <script src="config.js"></script>
+  <style>
+    :root{
+      --accent:#FFD200;         /* Relive yellow */
+      --accent-2:#ff8a00;
+      --bg:#0d1014;
+      --panel:rgba(18,22,28,.82);
+      --panel-solid:#12161c;
+      --stroke:rgba(255,255,255,.10);
+      --text:#f3f5f7;
+      --muted:#9aa4b0;
+      --radius:14px;
+      --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden}
+    #map{position:absolute;inset:0}
+
+    /* ---- top branding ---- */
+    #topbar{
+      position:absolute;top:16px;left:0;right:0;display:flex;justify-content:center;
+      pointer-events:none;z-index:5;
+    }
+    #brand{
+      display:flex;align-items:center;gap:10px;background:var(--panel);
+      backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+      border:1px solid var(--stroke);padding:8px 16px 8px 10px;border-radius:999px;
+      box-shadow:0 6px 24px rgba(0,0,0,.35);
+    }
+    #brand .logo{width:30px;height:30px;border-radius:9px;background:var(--accent);
+      display:grid;place-items:center;font-weight:800;color:#111;font-size:17px}
+    #brand .rt-title{font-weight:700;font-size:15px;letter-spacing:.2px;max-width:52vw;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #brand .rt-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;
+      color:#0c0e11;background:var(--accent);padding:2px 7px;border-radius:6px}
+
+    /* ---- config panel ---- */
+    #panel{
+      position:absolute;top:16px;right:16px;width:300px;max-height:calc(100vh - 32px);
+      overflow-y:auto;background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+      border:1px solid var(--stroke);border-radius:var(--radius);padding:14px;z-index:6;
+      box-shadow:0 12px 40px rgba(0,0,0,.45);font-size:13px;
+    }
+    #panel.collapsed{width:auto;padding:0}
+    #panel.collapsed .panel-body{display:none}
+    .panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer}
+    .panel-head h2{margin:0;font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
+    #panel.collapsed .panel-head{padding:10px 12px}
+    #collapseBtn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+    .panel-body{margin-top:12px;display:flex;flex-direction:column;gap:13px}
+    .field{display:flex;flex-direction:column;gap:5px}
+    .field label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;
+      display:flex;justify-content:space-between;align-items:center}
+    .field label .val{color:var(--accent);font-variant-numeric:tabular-nums}
+    select,input[type=range],input[type=color]{width:100%}
+    select{background:#1c222b;color:var(--text);border:1px solid var(--stroke);border-radius:8px;
+      padding:8px 9px;font-size:13px;appearance:none;-webkit-appearance:none;cursor:pointer}
+    input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;
+      background:#2a323d;outline:none;cursor:pointer}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+      background:var(--accent);cursor:pointer;border:2px solid #0d1014;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+    input[type=color]{height:34px;padding:2px;border:1px solid var(--stroke);border-radius:8px;background:#1c222b;cursor:pointer}
+    .row{display:flex;gap:8px}
+    .row>*{flex:1}
+    .toggles{display:flex;flex-direction:column;gap:8px}
+    .toggle{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--text)}
+    .switch{position:relative;width:38px;height:22px;flex:0 0 auto}
+    .switch input{opacity:0;width:0;height:0}
+    .slider{position:absolute;inset:0;background:#2a323d;border-radius:999px;transition:.2s}
+    .slider:before{content:"";position:absolute;height:16px;width:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+    .switch input:checked+.slider{background:var(--accent)}
+    .switch input:checked+.slider:before{transform:translateX(16px)}
+    .seg{display:flex;background:#1c222b;border:1px solid var(--stroke);border-radius:8px;overflow:hidden}
+    .seg button{flex:1;background:none;border:none;color:var(--muted);padding:7px 0;font-size:12px;font-weight:600;cursor:pointer}
+    .seg button.active{background:var(--accent);color:#111}
+    .hint{font-size:11px;color:var(--muted);line-height:1.4}
+    .divider{height:1px;background:var(--stroke);margin:2px 0}
+
+    /* ---- bottom HUD: stats + playback + elevation ---- */
+    #hud{
+      position:absolute;left:16px;right:16px;bottom:16px;z-index:6;
+      display:flex;flex-direction:column;gap:10px;pointer-events:none;
+    }
+    #hud .card{background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+      border:1px solid var(--stroke);border-radius:var(--radius);box-shadow:0 12px 40px rgba(0,0,0,.45);pointer-events:auto}
+    #elevWrap{padding:8px 14px 4px}
+    #elev{display:block;width:100%;height:56px}
+    #stats{display:flex;align-items:center;gap:8px;padding:10px 14px;flex-wrap:wrap}
+    .stat{display:flex;align-items:center;gap:9px;min-width:96px}
+    .stat .ic{width:30px;height:30px;flex:0 0 auto;border-radius:9px;background:rgba(255,255,255,.06);
+      display:grid;place-items:center}
+    .stat .ic svg{width:16px;height:16px;stroke:var(--accent);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .stat .v{font-size:16px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums}
+    .stat .k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+    .stat-spacer{flex:1}
+    .transport{display:flex;align-items:center;gap:10px}
+    .pbtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--stroke);background:#1c222b;color:var(--text);
+      cursor:pointer;display:grid;place-items:center}
+    .pbtn.primary{background:var(--accent);color:#111;border-color:transparent;width:46px;height:46px}
+    .pbtn svg{width:18px;height:18px;fill:currentColor}
+    #scrub{flex:1;min-width:120px}
+    #progressLine{stroke:var(--accent);stroke-width:2.5;fill:none}
+
+    /* moving head marker */
+    .head-marker{width:16px;height:16px;border-radius:50%;background:#fff;
+      box-shadow:0 0 0 4px rgba(255,210,0,.55),0 0 18px 4px rgba(255,210,0,.5)}
+    .head-marker::after{content:"";position:absolute;inset:-8px;border-radius:50%;
+      border:2px solid rgba(255,210,0,.7);animation:pulse 1.6s ease-out infinite}
+    @keyframes pulse{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.9);opacity:0}}
+    .pin{width:20px;height:20px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #0d1014;
+      box-shadow:0 3px 8px rgba(0,0,0,.5)}
+    .pin.start{background:#2ec77a}
+    .pin.finish{background:#ff5a5f}
+
+    /* dropzone / loading */
+    #drop{position:absolute;inset:0;z-index:20;display:none;place-items:center;background:rgba(6,8,11,.7);
+      backdrop-filter:blur(4px)}
+    #drop.show{display:grid}
+    #drop .box{border:2px dashed var(--accent);border-radius:18px;padding:40px 60px;text-align:center;font-size:18px;font-weight:600}
+    #toast{position:absolute;left:50%;bottom:120px;transform:translateX(-50%);z-index:30;
+      background:#20262f;border:1px solid var(--stroke);padding:10px 16px;border-radius:10px;font-size:13px;
+      box-shadow:0 8px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .25s;pointer-events:none;max-width:80vw;text-align:center}
+    #toast.show{opacity:1}
+
+    @media(max-width:640px){
+      #panel{width:calc(100vw - 32px)}
+      #brand .rt-title{max-width:40vw}
+      .stat{min-width:82px}
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="topbar">
+    <div id="brand">
+      <div class="logo">R</div>
+      <div class="rt-title" id="routeTitle">Flyover Visualiser</div>
+      <div class="rt-badge" id="routeBadge" style="display:none"></div>
+    </div>
+  </div>
+
+  <div id="panel">
+    <div class="panel-head" id="panelHead">
+      <h2>Flyover controls</h2>
+      <button id="collapseBtn" title="Collapse">▾</button>
+    </div>
+    <div class="panel-body">
+      <div class="field">
+        <label for="routeSel">Route</label>
+        <select id="routeSel"></select>
+        <div class="hint" id="uploadRow">or <a href="#" id="uploadLink" style="color:var(--accent)">upload a .gpx file</a></div>
+        <input type="file" id="fileInput" accept=".gpx" style="display:none" />
+      </div>
+
+      <div class="field">
+        <label for="styleSel">Base map style</label>
+        <select id="styleSel"></select>
+      </div>
+
+      <div class="field">
+        <label for="lightSel">Light / time of day</label>
+        <select id="lightSel">
+          <option value="dawn">Dawn</option>
+          <option value="day" selected>Day</option>
+          <option value="dusk">Dusk</option>
+          <option value="night">Night</option>
+        </select>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label>Route colour</label>
+        <div class="row">
+          <input type="color" id="colorInp" value="#FFD200" />
+          <div class="seg" id="swatches" style="flex:2">
+            <button data-c="#FFD200" title="Relive yellow" style="background:#FFD200"></button>
+            <button data-c="#ff5a5f" title="Coral" style="background:#ff5a5f"></button>
+            <button data-c="#38bdf8" title="Sky" style="background:#38bdf8"></button>
+            <button data-c="#a3e635" title="Lime" style="background:#a3e635"></button>
+            <button data-c="#ffffff" title="White" style="background:#fff"></button>
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="widthInp">Line width <span class="val" id="widthVal">6</span></label>
+        <input type="range" id="widthInp" min="2" max="14" step="0.5" value="6" />
+      </div>
+      <div class="field">
+        <label for="exagInp">Terrain exaggeration <span class="val" id="exagVal">1.4×</span></label>
+        <input type="range" id="exagInp" min="0" max="2.5" step="0.05" value="1.4" />
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="field">
+        <label for="heightInp">Camera height <span class="val" id="heightVal">320 m</span></label>
+        <input type="range" id="heightInp" min="80" max="2500" step="10" value="320" />
+      </div>
+      <div class="field">
+        <label for="followInp">Follow distance <span class="val" id="followVal">260 m</span></label>
+        <input type="range" id="followInp" min="40" max="1200" step="10" value="260" />
+      </div>
+      <div class="field">
+        <label for="speedInp">Flyover speed <span class="val" id="speedVal">1.0×</span></label>
+        <input type="range" id="speedInp" min="0.25" max="3" step="0.05" value="1" />
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="toggles">
+        <div class="toggle">Place labels
+          <label class="switch"><input type="checkbox" id="labelsChk" checked><span class="slider"></span></label></div>
+        <div class="toggle">3D buildings / trees
+          <label class="switch"><input type="checkbox" id="objChk" checked><span class="slider"></span></label></div>
+        <div class="toggle">Loop flyover
+          <label class="switch"><input type="checkbox" id="loopChk" checked><span class="slider"></span></label></div>
+      </div>
+
+      <div class="field">
+        <label>Units</label>
+        <div class="seg" id="unitSeg">
+          <button data-u="metric" class="active">km</button>
+          <button data-u="imperial">mi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div class="card" id="elevWrap">
+      <svg id="elev" preserveAspectRatio="none" viewBox="0 0 1000 100">
+        <defs>
+          <linearGradient id="elevFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+          </linearGradient>
+          <clipPath id="elevClip"><rect id="elevClipRect" x="0" y="0" width="0" height="100"/></clipPath>
+        </defs>
+        <path id="elevArea" fill="url(#elevFill)"></path>
+        <path id="elevLine" stroke="rgba(255,255,255,.28)" stroke-width="1.5" fill="none"></path>
+        <path id="elevLineDone" stroke="var(--accent)" stroke-width="2.5" fill="none" clip-path="url(#elevClip)"></path>
+        <line id="elevCursor" y1="0" y2="100" stroke="#fff" stroke-width="1" opacity="0.7"></line>
+      </svg>
+    </div>
+    <div class="card" id="stats">
+      <div class="stat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 20 L20 4 M9 20 H4 v-5"/></svg></div>
+        <div><div class="v" id="distV">–</div><div class="k">Distance</div></div></div>
+      <div class="stat"><div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/></svg></div>
+        <div><div class="v" id="timeV">–</div><div class="k">Duration</div></div></div>
+      <div class="stat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 20 L9 8 l4 7 3-5 5 10 z"/></svg></div>
+        <div><div class="v" id="gainV">–</div><div class="k">Elev. gain</div></div></div>
+      <div class="stat-spacer"></div>
+      <div class="transport">
+        <input type="range" id="scrub" min="0" max="1000" step="1" value="0" />
+        <button class="pbtn" id="restartBtn" title="Restart"><svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg></button>
+        <button class="pbtn primary" id="playBtn" title="Play/Pause"><svg viewBox="0 0 24 24" id="playIcon"><path d="M7 5v14l12-7z"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="drop"><div class="box">Drop a .gpx file to fly it 🪂</div></div>
+  <div id="toast"></div>
+
+<script>
+/* ============================================================================
+   Relive-style Flyover Visualiser  —  Mapbox GL JS v3 free-camera path
+   Single-file app. Paste your PUBLIC Mapbox token below.
+   ========================================================================== */
+
+// ---- 1. TOKEN -------------------------------------------------------------
+// Token is supplied by the git-ignored config.js (`window.MAPBOX_TOKEN = 'pk...'`).
+// Fallbacks: ?access_token=pk... in the URL, or localStorage.mapbox_token.
+const urlToken = new URLSearchParams(location.search).get('access_token');
+mapboxgl.accessToken = urlToken || window.MAPBOX_TOKEN || localStorage.getItem('mapbox_token') || '';
+
+// ---- 2. ROUTE MANIFEST ----------------------------------------------------
+// type ∈ mountain | outdoor | city | water  → drives default style + terrain
+const ROUTES = [
+  { file:'908510134_export_gpx.gpx',  title:'Ride to brunch ☕️',                         type:'city' },
+  { file:'908110217_export_gpx.gpx',  title:'1st spring run 🏃',                          type:'city' },
+  { file:'1121855260_export_gpx.gpx', title:'Post-dinner stroll in Rome',               type:'city' },
+  { file:'1235232985_export_gpx.gpx', title:'Fontainebleau 🥾',                          type:'outdoor' },
+  { file:'1331530472_export_gpx.gpx', title:'Eclictic (Dutch waterway)',                type:'water' },
+  { file:'1091730718_export_gpx.gpx', title:'Kokoda Walk – 1000 Steps',                 type:'mountain' },
+  { file:'1300079070_export_gpx.gpx', title:'Early Burrough Hike (Rainier)',            type:'mountain' },
+  { file:'1303022040_export_gpx.gpx', title:'Third Burrough Hike (Rainier)',            type:'mountain' },
+  { file:'1344549639_export_gpx.gpx', title:'Jordan Pond & the Bubbles, Acadia',        type:'mountain' },
+];
+
+const STYLES = {
+  'standard-satellite': { url:'mapbox://styles/mapbox/standard-satellite', label:'Standard Satellite (satellite + terrain)', standard:true },
+  'standard':           { url:'mapbox://styles/mapbox/standard',           label:'Standard (vector 3D)',                     standard:true },
+  'satellite-streets':  { url:'mapbox://styles/mapbox/satellite-streets-v12', label:'Satellite Streets (classic)',          standard:false },
+};
+
+// default base style + terrain exaggeration seed by route type
+const TYPE_DEFAULTS = {
+  mountain: { style:'standard-satellite', exag:1.7 },
+  outdoor:  { style:'standard-satellite', exag:1.4 },
+  water:    { style:'standard-satellite', exag:1.0 },
+  city:     { style:'standard',           exag:1.15 },
+};
+
+// ---- 3. STATE -------------------------------------------------------------
+const state = {
+  route: null,            // { feature, coords, elevations, times, lengthKm, stats, bbox }
+  styleKey: 'standard-satellite',
+  units: 'metric',
+  phase: 0,
+  playing: false,
+  loop: true,
+  raf: null,
+  lastTs: null,
+  pendingAfterStyle: null,
+  headMarker: null,
+  startMarker: null,
+  finishMarker: null,
+  cfg: {
+    color:'#FFD200', width:6, exag:1.4,
+    height:320, follow:260, speed:1,
+    light:'day', labels:true, objects:true,
+  },
+};
+
+// ---- 4. MAP INIT ----------------------------------------------------------
+const map = new mapboxgl.Map({
+  container:'map',
+  style: STYLES[state.styleKey].url,
+  center:[2.36, 48.83], zoom:11, pitch:60, bearing:0,
+  projection:'globe',
+  antialias:true,
+  attributionControl:true,
+});
+map.addControl(new mapboxgl.NavigationControl({visualizePitch:true}), 'bottom-left');
+
+map.on('style.load', onStyleLoad);
+map.on('error', (e)=>console.warn('map error:', e && e.error && e.error.message));
+
+function onStyleLoad(){
+  addTerrain();
+  applyBasemapConfig();
+  if(state.route){ addRouteLayers(); }
+  const cb = state.pendingAfterStyle; state.pendingAfterStyle = null;
+  if(cb) cb(); else if(state.route) renderAt(state.phase);
+}
+
+function addTerrain(){
+  if(!map.getSource('mapbox-dem')){
+    map.addSource('mapbox-dem', { type:'raster-dem', url:'mapbox://mapbox.mapbox-terrain-dem-v1', tileSize:512, maxzoom:14 });
+  }
+  map.setTerrain({ source:'mapbox-dem', exaggeration: state.cfg.exag });
+  if(!map.getLayer('sky') && !STYLES[state.styleKey].standard){
+    map.addLayer({ id:'sky', type:'sky', paint:{ 'sky-type':'atmosphere', 'sky-atmosphere-sun-intensity':10 } });
+  }
+}
+
+function applyBasemapConfig(){
+  if(!STYLES[state.styleKey].standard) return; // classic styles have no basemap import
+  try{
+    map.setConfigProperty('basemap','lightPreset', state.cfg.light);
+    map.setConfigProperty('basemap','showPlaceLabels', state.cfg.labels);
+    map.setConfigProperty('basemap','showPointOfInterestLabels', state.cfg.labels);
+    map.setConfigProperty('basemap','show3dObjects', state.cfg.objects);
+  }catch(e){ /* config not ready on some styles */ }
+}
+
+// ---- 5. GPX PARSING -------------------------------------------------------
+function parseGpx(xmlString){
+  const doc = new DOMParser().parseFromString(xmlString, 'application/xml');
+  if(doc.querySelector('parsererror')) throw new Error('Invalid GPX/XML');
+  const pts = Array.from(doc.getElementsByTagName('trkpt'));
+  if(!pts.length) throw new Error('No <trkpt> points found in GPX');
+  const coords = [], elevations = [], times = [];
+  for(const p of pts){
+    const lng = parseFloat(p.getAttribute('lon'));
+    const lat = parseFloat(p.getAttribute('lat'));
+    if(!isFinite(lng) || !isFinite(lat)) continue;
+    coords.push([lng, lat]);
+    const eleEl = p.getElementsByTagName('ele')[0];
+    elevations.push(eleEl ? parseFloat(eleEl.textContent) : null);
+    const tEl = p.getElementsByTagName('time')[0];
+    times.push(tEl ? Date.parse(tEl.textContent) : null);
+  }
+  const nameEl = doc.getElementsByTagName('name')[0];
+  const name = nameEl ? nameEl.textContent.trim() : null;
+  return { coords, elevations, times, name };
+}
+
+function buildRoute(parsed, title, type){
+  const coords = parsed.coords;
+  const feature = turf.lineString(coords);
+  const lengthKm = turf.length(feature, {units:'kilometers'});
+  const bbox = turf.bbox(feature);
+
+  // duration
+  const ts = parsed.times.filter(t=>isFinite(t));
+  const durationMs = ts.length>=2 ? (ts[ts.length-1]-ts[0]) : null;
+
+  // clean elevations: carry last-known value across gaps
+  const eles=[]; let carry=null, min=Infinity, max=-Infinity;
+  for(const e of parsed.elevations){
+    if(isFinite(e)){ carry=e; if(e<min)min=e; if(e>max)max=e; }
+    eles.push(carry);
+  }
+  if(!isFinite(min)){ min=0; max=0; }
+
+  // elevation gain from a smoothed series (window-21 moving average) so raw GPS
+  // jitter on flat/marine tracks isn't accumulated as thousands of phantom metres,
+  // while real climbs on densely-sampled hikes are preserved.
+  let gain=0;
+  if(eles.some(v=>v!=null)){
+    const W=21, h=(W-1)/2, sm=[];
+    for(let i=0;i<eles.length;i++){
+      let s=0,c=0; for(let j=Math.max(0,i-h);j<=Math.min(eles.length-1,i+h);j++){ if(eles[j]!=null){s+=eles[j];c++;} }
+      sm.push(c? s/c : (sm[i-1]??0));
+    }
+    for(let i=1;i<sm.length;i++){ const d=sm[i]-sm[i-1]; if(d>0) gain+=d; }
+  }
+
+  return {
+    feature, coords, elevations:eles, times:parsed.times,
+    lengthKm, bbox, title, type,
+    stats:{ distanceKm:lengthKm, durationMs, gainM:gain, minEle:min, maxEle:max },
+  };
+}
+
+// ---- 6. LOAD / SELECT ROUTE ----------------------------------------------
+async function selectRouteByFile(file){
+  const meta = ROUTES.find(r=>r.file===file);
+  try{
+    toast('Loading route…');
+    const res = await fetch('./gpx/'+file);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const txt = await res.text();
+    const parsed = parseGpx(txt);
+    loadRoute(buildRoute(parsed, meta?meta.title:(parsed.name||file), meta?meta.type:'outdoor'));
+    hideToast();
+  }catch(err){
+    toast('Could not fetch '+file+'. Serve over http (python3 -m http.server) or use “upload a .gpx file”.', 5200);
+    console.error(err);
+  }
+}
+
+function loadRoute(route){
+  state.route = route;
+  // seed adaptive terrain + default style from type/relief
+  const def = TYPE_DEFAULTS[route.type] || TYPE_DEFAULTS.outdoor;
+  const eleRange = route.stats.maxEle - route.stats.minEle;
+  let exag = def.exag;
+  if(route.type!=='city'){ if(eleRange>700) exag=Math.max(exag,1.9); else if(eleRange<120) exag=Math.min(exag,1.1); }
+  setExag(exag);
+
+  // UI: title + badge + stats + elevation profile
+  document.getElementById('routeTitle').textContent = route.title;
+  const badge = document.getElementById('routeBadge');
+  badge.textContent = route.type; badge.style.display='inline-block';
+  renderStats(); drawElevation();
+  state.phase = 0; updateScrub();
+
+  const desiredStyle = def.style;
+  const frameThenPlay = ()=>{ frameRoute(); };
+  if(desiredStyle !== state.styleKey){
+    document.getElementById('styleSel').value = desiredStyle;
+    switchStyle(desiredStyle, frameThenPlay);
+  }else{
+    // same style: (re)add layers now, then frame
+    if(map.isStyleLoaded()){ addRouteLayers(); frameThenPlay(); }
+    else { state.pendingAfterStyle = ()=>{ addRouteLayers(); frameThenPlay(); }; }
+  }
+}
+
+function switchStyle(key, after){
+  state.styleKey = key;
+  state.pendingAfterStyle = after || null;
+  removeRouteLayers();      // markers/sources are wiped by setStyle anyway
+  map.setStyle(STYLES[key].url);   // onStyleLoad re-adds terrain + route + config
+}
+
+// ---- 7. ROUTE LAYERS + MARKERS -------------------------------------------
+function removeRouteLayers(){
+  ['route-main','route-casing','route-ghost'].forEach(id=>{ if(map.getLayer(id)) map.removeLayer(id); });
+  if(map.getSource('route')) map.removeSource('route');
+  [state.headMarker,state.startMarker,state.finishMarker].forEach(m=>{ if(m) m.remove(); });
+  state.headMarker=state.startMarker=state.finishMarker=null;
+}
+
+function addRouteLayers(){
+  if(!state.route) return;
+  removeRouteLayers();
+  map.addSource('route', { type:'geojson', lineMetrics:true, data:state.route.feature });
+
+  // faint full-route "ghost" (always visible)
+  map.addLayer({ id:'route-ghost', type:'line', source:'route',
+    layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':state.cfg.color,'line-opacity':0.22,'line-width':state.cfg.width}});
+  // dark casing for the drawn trail
+  map.addLayer({ id:'route-casing', type:'line', source:'route',
+    layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':'#0c0e11','line-opacity':0.9,'line-width':state.cfg.width+3,'line-trim-offset':[0,1]}});
+  // bright drawn trail
+  map.addLayer({ id:'route-main', type:'line', source:'route',
+    layout:{'line-cap':'round','line-join':'round'},
+    paint:{'line-color':state.cfg.color,'line-width':state.cfg.width,'line-trim-offset':[0,1]}});
+
+  const c = state.route.coords;
+  const start = c[0], finish = c[c.length-1];
+  const mk = (cls)=>{ const el=document.createElement('div'); el.className='pin '+cls; return el; };
+  state.startMarker  = new mapboxgl.Marker({element:mk('start'),  anchor:'bottom'}).setLngLat(start).addTo(map);
+  state.finishMarker = new mapboxgl.Marker({element:mk('finish'), anchor:'bottom'}).setLngLat(finish).addTo(map);
+  const head = document.createElement('div'); head.className='head-marker';
+  state.headMarker = new mapboxgl.Marker({element:head}).setLngLat(start).addTo(map);
+
+  applyLineStyle();
+}
+
+function applyLineStyle(){
+  if(!map.getLayer('route-main')) return;
+  map.setPaintProperty('route-main','line-color',state.cfg.color);
+  map.setPaintProperty('route-main','line-width',state.cfg.width);
+  map.setPaintProperty('route-casing','line-width',state.cfg.width+3);
+  map.setPaintProperty('route-ghost','line-color',state.cfg.color);
+  map.setPaintProperty('route-ghost','line-width',state.cfg.width);
+}
+
+// ---- 8. CAMERA + ANIMATION -----------------------------------------------
+function durationMs(){
+  const km = state.route ? state.route.lengthKm : 5;
+  const base = Math.min(45000, Math.max(12000, km*3500));
+  return base / state.cfg.speed;
+}
+
+// place camera & reveal trail for a given phase 0..1
+function renderAt(phase){
+  if(!state.route) return;
+  phase = Math.min(1, Math.max(0, phase));
+  const total = state.route.lengthKm;
+  const followKm = state.cfg.follow/1000;
+  const tgtDist = phase*total;
+  const camDist = Math.max(0, tgtDist - followKm);
+  const tgt = turf.along(state.route.feature, tgtDist, {units:'kilometers'}).geometry.coordinates;
+  const camPt = turf.along(state.route.feature, camDist, {units:'kilometers'}).geometry.coordinates;
+
+  let ground = 0;
+  try{ const g = map.queryTerrainElevation({lng:camPt[0],lat:camPt[1]}, {exaggerated:true}); if(isFinite(g)) ground = g; }catch(e){}
+
+  const cam = map.getFreeCameraOptions();
+  cam.position = mapboxgl.MercatorCoordinate.fromLngLat({lng:camPt[0],lat:camPt[1]}, ground + state.cfg.height);
+  cam.lookAtPoint({lng:tgt[0],lat:tgt[1]});
+  map.setFreeCameraOptions(cam);
+
+  // reveal trail [0, phase]  → trim (hide) [phase, 1]
+  const trim = [Math.min(0.9999, phase), 1];
+  if(map.getLayer('route-main'))   map.setPaintProperty('route-main','line-trim-offset', trim);
+  if(map.getLayer('route-casing')) map.setPaintProperty('route-casing','line-trim-offset', trim);
+
+  if(state.headMarker) state.headMarker.setLngLat(tgt);
+  updateElevationCursor(phase);
+}
+
+function tick(ts){
+  if(!state.playing) return;
+  if(state.lastTs==null) state.lastTs = ts;
+  const dt = ts - state.lastTs; state.lastTs = ts;
+  state.phase += dt / durationMs();
+  if(state.phase >= 1){
+    state.phase = 1; renderAt(1); updateScrub();
+    if(state.loop){ state.phase = 0; state.lastTs = null; state.raf = requestAnimationFrame(tick); }
+    else { setPlaying(false); }
+    return;
+  }
+  renderAt(state.phase); updateScrub();
+  state.raf = requestAnimationFrame(tick);
+}
+
+function setPlaying(on){
+  state.playing = on; state.lastTs = null;
+  if(state.raf){ cancelAnimationFrame(state.raf); state.raf=null; }
+  const icon = document.getElementById('playIcon');
+  icon.innerHTML = on ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>' : '<path d="M7 5v14l12-7z"/>';
+  if(on){ if(state.phase>=1) state.phase=0; state.raf = requestAnimationFrame(tick); }
+}
+
+function frameRoute(){
+  const b = state.route.bbox;
+  const bounds = new mapboxgl.LngLatBounds([b[0],b[1]],[b[2],b[3]]);
+  // bearing along the first portion of the route for a nice intro heading
+  const c = state.route.coords;
+  const brg = turf.bearing(turf.point(c[0]), turf.point(c[Math.min(c.length-1, Math.floor(c.length*0.15))||1]));
+  map.fitBounds(bounds, { padding:{top:120,bottom:200,left:80,right:340}, pitch:58, bearing:brg, duration:1600 });
+  map.once('moveend', ()=>{ state.phase=0; renderAt(0); updateScrub(); setPlaying(true); });
+}
+
+// ---- 9. STATS + ELEVATION PROFILE ----------------------------------------
+function fmtDist(km){
+  if(state.units==='imperial'){ const mi=km*0.621371; return (mi<10?mi.toFixed(2):mi.toFixed(1))+' mi'; }
+  return (km<10?km.toFixed(2):km.toFixed(1))+' km';
+}
+function fmtElev(m){
+  if(state.units==='imperial') return Math.round(m*3.28084).toLocaleString()+' ft';
+  return Math.round(m).toLocaleString()+' m';
+}
+function fmtDur(ms){
+  if(ms==null) return '—';
+  const s=Math.round(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60);
+  return h>0 ? `${h}h ${m}m` : `${m}m ${s%60}s`;
+}
+function renderStats(){
+  if(!state.route) return;
+  const st=state.route.stats;
+  document.getElementById('distV').textContent = fmtDist(st.distanceKm);
+  document.getElementById('timeV').textContent = fmtDur(st.durationMs);
+  document.getElementById('gainV').textContent = fmtElev(st.gainM);
+}
+
+function drawElevation(){
+  const eles = state.route.elevations;
+  const svgW=1000, svgH=100;
+  // build a cleaned series (carry last known value over nulls)
+  const ys=[]; let last=state.route.stats.minEle;
+  for(const e of eles){ if(e!=null) last=e; ys.push(last); }
+  const n=ys.length;
+  const min=state.route.stats.minEle, max=state.route.stats.maxEle, range=(max-min)||1;
+  const pad=6;
+  const pt=(i)=>{
+    const x= n<=1?0 : (i/(n-1))*svgW;
+    const y= svgH-pad - ((ys[i]-min)/range)*(svgH-2*pad);
+    return [x,y];
+  };
+  let d=''; for(let i=0;i<n;i++){ const [x,y]=pt(i); d+=(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)+' '; }
+  document.getElementById('elevLine').setAttribute('d', d);
+  document.getElementById('elevLineDone').setAttribute('d', d);
+  document.getElementById('elevArea').setAttribute('d', d+`L ${svgW} ${svgH} L 0 ${svgH} Z`);
+  state._elev = { ys, n, min, range, svgW, svgH, pad, d };
+  updateElevationCursor(state.phase);
+}
+
+function updateElevationCursor(phase){
+  const E=state._elev; if(!E) return;
+  const x = phase*E.svgW;
+  document.getElementById('elevCursor').setAttribute('x1',x);
+  document.getElementById('elevCursor').setAttribute('x2',x);
+  // reveal the bright profile by growing a clip rect — O(1) per frame
+  document.getElementById('elevClipRect').setAttribute('width', x.toFixed(1));
+}
+
+function updateScrub(){ document.getElementById('scrub').value = Math.round(state.phase*1000); }
+
+// ---- 10. UI WIRING --------------------------------------------------------
+function toast(msg, ms=2600){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toast._t); if(ms) toast._t=setTimeout(hideToast, ms); }
+function hideToast(){ document.getElementById('toast').classList.remove('show'); }
+
+function setExag(v){
+  state.cfg.exag=+v;
+  document.getElementById('exagInp').value=v;
+  document.getElementById('exagVal').textContent=(+v).toFixed(2)+'×';
+  try{ if(map.getTerrain?.() || map.getSource('mapbox-dem')) map.setTerrain({source:'mapbox-dem',exaggeration:+v}); }catch(e){}
+}
+
+// populate dropdowns
+const routeSel=document.getElementById('routeSel');
+ROUTES.forEach(r=>{ const o=document.createElement('option'); o.value=r.file; o.textContent=r.title; routeSel.appendChild(o); });
+const styleSel=document.getElementById('styleSel');
+Object.entries(STYLES).forEach(([k,v])=>{ const o=document.createElement('option'); o.value=k; o.textContent=v.label; styleSel.appendChild(o); });
+styleSel.value=state.styleKey;
+
+routeSel.addEventListener('change', e=> selectRouteByFile(e.target.value));
+styleSel.addEventListener('change', e=>{ switchStyle(e.target.value, ()=>{ renderAt(state.phase); }); });
+
+document.getElementById('lightSel').addEventListener('change', e=>{ state.cfg.light=e.target.value; applyBasemapConfig(); });
+document.getElementById('labelsChk').addEventListener('change', e=>{ state.cfg.labels=e.target.checked; applyBasemapConfig(); });
+document.getElementById('objChk').addEventListener('change', e=>{ state.cfg.objects=e.target.checked; applyBasemapConfig(); });
+document.getElementById('loopChk').addEventListener('change', e=>{ state.loop=e.target.checked; });
+
+const colorInp=document.getElementById('colorInp');
+colorInp.addEventListener('input', e=>{ state.cfg.color=e.target.value; applyLineStyle(); });
+document.getElementById('swatches').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return; e.preventDefault();
+  state.cfg.color=b.dataset.c; colorInp.value=b.dataset.c; applyLineStyle();
+});
+const widthInp=document.getElementById('widthInp');
+widthInp.addEventListener('input', e=>{ state.cfg.width=+e.target.value; document.getElementById('widthVal').textContent=(+e.target.value).toFixed(1).replace(/\.0$/,''); applyLineStyle(); });
+document.getElementById('exagInp').addEventListener('input', e=> setExag(e.target.value));
+
+const heightInp=document.getElementById('heightInp');
+heightInp.addEventListener('input', e=>{ state.cfg.height=+e.target.value; document.getElementById('heightVal').textContent=(+e.target.value)+' m'; if(!state.playing) renderAt(state.phase); });
+const followInp=document.getElementById('followInp');
+followInp.addEventListener('input', e=>{ state.cfg.follow=+e.target.value; document.getElementById('followVal').textContent=(+e.target.value)+' m'; if(!state.playing) renderAt(state.phase); });
+const speedInp=document.getElementById('speedInp');
+speedInp.addEventListener('input', e=>{ state.cfg.speed=+e.target.value; document.getElementById('speedVal').textContent=(+e.target.value).toFixed(2).replace(/0$/,'')+'×'; });
+
+document.getElementById('playBtn').addEventListener('click', ()=> setPlaying(!state.playing));
+document.getElementById('restartBtn').addEventListener('click', ()=>{ state.phase=0; renderAt(0); updateScrub(); setPlaying(true); });
+document.getElementById('scrub').addEventListener('input', e=>{
+  state.phase = (+e.target.value)/1000; state.lastTs=null; renderAt(state.phase);
+});
+
+document.getElementById('unitSeg').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  state.units=b.dataset.u;
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle('active', x===b));
+  renderStats();
+});
+
+// collapse panel
+document.getElementById('panelHead').addEventListener('click', ()=>{
+  const p=document.getElementById('panel'); p.classList.toggle('collapsed');
+  document.getElementById('collapseBtn').textContent = p.classList.contains('collapsed')?'▸':'▾';
+});
+
+// file upload + drag/drop (works from file:// too)
+const fileInput=document.getElementById('fileInput');
+document.getElementById('uploadLink').addEventListener('click', e=>{ e.preventDefault(); fileInput.click(); });
+fileInput.addEventListener('change', e=>{ const f=e.target.files[0]; if(f) readLocalGpx(f); });
+function readLocalGpx(file){
+  const rd=new FileReader();
+  rd.onload=()=>{ try{ const parsed=parseGpx(rd.result);
+      loadRoute(buildRoute(parsed, parsed.name||file.name, 'outdoor'));
+      routeSel.value=''; // custom
+    }catch(err){ toast('Could not parse that GPX: '+err.message, 4000); } };
+  rd.readAsText(file);
+}
+const dz=document.getElementById('drop');
+['dragenter','dragover'].forEach(ev=>window.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.add('show'); }));
+['dragleave','drop'].forEach(ev=>window.addEventListener(ev, e=>{ e.preventDefault(); if(ev==='drop'){ const f=e.dataTransfer.files[0]; if(f) readLocalGpx(f);} dz.classList.remove('show'); }));
+
+// ---- 11. BOOT -------------------------------------------------------------
+if(!mapboxgl.accessToken){
+  toast('No Mapbox token. Copy config.example.js → config.js and paste your pk.* token.', 8000);
+}
+map.on('load', ()=>{ routeSel.value = ROUTES[0].file; selectRouteByFile(ROUTES[0].file); });
+</script>
+</body>
+</html>
