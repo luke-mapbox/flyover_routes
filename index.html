@@ -58,6 +58,9 @@
     .panel-head h2{margin:0;font-size:13px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
     #panel.collapsed .panel-head{padding:10px 12px}
     #collapseBtn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+    #docsBtn{display:grid;place-items:center;background:none;border:none;color:var(--muted);cursor:pointer;padding:0;text-decoration:none;transition:.15s}
+    #docsBtn:hover{color:var(--accent)}
+    #docsBtn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;display:block}
     .panel-head .actions{display:flex;align-items:center;gap:7px}
     #resetBtn{background:none;border:1px solid var(--stroke);color:var(--muted);font-size:10px;font-weight:700;
       text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:6px;cursor:pointer;transition:.15s}
@@ -101,7 +104,7 @@
 
     /* ---- bottom HUD: stats + playback + elevation ---- */
     #hud{
-      position:absolute;left:16px;right:332px;bottom:16px;z-index:6; /* clear the 300px panel + margins */
+      position:absolute;left:56px;right:332px;bottom:44px;z-index:6; /* clear the 300px panel; lifted up + nudged right so the bottom Mapbox logo + attribution aren't obscured */
       display:flex;flex-direction:column;gap:10px;pointer-events:none;
     }
     #hud .card{background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
@@ -169,7 +172,9 @@
       <h2>Flyover controls</h2>
       <div class="actions">
         <button id="resetBtn" title="Reset all settings to defaults">Reset</button>
-        <button id="collapseBtn" title="Collapse">▾</button>
+        <a id="docsBtn" href="./docs.html" target="_blank" rel="noopener" title="Mapbox APIs used in this demo">
+          <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+        </a>
       </div>
     </div>
     <div class="panel-body">
@@ -1044,10 +1049,10 @@ document.getElementById('unitSeg').addEventListener('click', e=>{
   renderStats();
 });
 
-// collapse panel
+// collapse panel by clicking the header (not the docs link, which opens the API reference)
+document.getElementById('docsBtn').addEventListener('click', e=> e.stopPropagation());
 document.getElementById('panelHead').addEventListener('click', ()=>{
-  const p=document.getElementById('panel'); p.classList.toggle('collapsed');
-  document.getElementById('collapseBtn').textContent = p.classList.contains('collapsed')?'▸':'▾';
+  document.getElementById('panel').classList.toggle('collapsed');
 });
 
 // file upload + drag/drop (works from file:// too)

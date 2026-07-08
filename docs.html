@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mapbox APIs used — Flyover Route Visualiser</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root{
+      --accent:#FFD200; --bg:#0d1014; --panel:#12161c; --panel-2:#171c24;
+      --stroke:rgba(255,255,255,.10); --text:#f3f5f7; --muted:#9aa4b0;
+      --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.5}
+    a{color:var(--accent)}
+    .wrap{max-width:1000px;margin:0 auto;padding:40px 22px 80px}
+
+    header{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+    .logo{width:40px;height:40px;border-radius:11px;background:var(--accent);display:grid;place-items:center;
+      font-weight:800;color:#111;font-size:22px;flex:0 0 auto}
+    h1{font-size:26px;margin:0;letter-spacing:.2px}
+    .sub{color:var(--muted);font-size:15px;margin:14px 0 6px}
+    .backlink{display:inline-block;margin-bottom:28px;font-size:13px;font-weight:600;text-decoration:none;
+      border:1px solid var(--stroke);padding:6px 12px;border-radius:8px;color:var(--muted)}
+    .backlink:hover{color:var(--text);border-color:var(--muted)}
+
+    section{margin-top:34px}
+    h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--accent);
+      margin:0 0 4px;padding-bottom:8px;border-bottom:1px solid var(--stroke)}
+    .sec-note{color:var(--muted);font-size:13.5px;margin:10px 0 16px}
+
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:720px){ .grid{grid-template-columns:1fr} }
+    .card{background:var(--panel);border:1px solid var(--stroke);border-radius:12px;padding:14px 15px;
+      display:flex;flex-direction:column;gap:7px}
+    .card code.api{font-family:var(--mono);font-size:13px;color:var(--text);background:var(--panel-2);
+      border:1px solid var(--stroke);border-radius:6px;padding:3px 7px;align-self:flex-start;font-weight:600}
+    .card p{margin:0;font-size:13.5px;color:var(--muted)}
+    .card p b{color:var(--text);font-weight:600}
+    .card a.doc{margin-top:auto;font-size:12.5px;font-weight:600;text-decoration:none;align-self:flex-start}
+    .card a.doc:hover{text-decoration:underline}
+    .card a.doc::after{content:" →"}
+
+    footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--stroke);color:var(--muted);font-size:12.5px}
+    footer code{font-family:var(--mono);background:var(--panel-2);border:1px solid var(--stroke);border-radius:5px;padding:1px 5px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">R</div>
+      <h1>Mapbox APIs used in this demo</h1>
+    </header>
+    <p class="sub">
+      The Flyover Route Visualiser is built entirely on <b>Mapbox GL JS v3</b> (with the Mapbox
+      <b>Standard</b> / <b>Standard Satellite</b> styles). Below is every Mapbox API it uses, grouped by
+      job, with a one-line note on what it does here and a link to the official docs.
+    </p>
+    <a class="backlink" href="./index.html">← Back to the flyover</a>
+
+    <section>
+      <h2>Map setup</h2>
+      <p class="sec-note">Creating the map, authenticating, and adding on-map controls.</p>
+      <div class="grid">
+        <div class="card">
+          <code class="api">new mapboxgl.Map()</code>
+          <p>Creates the map on a <b>globe</b> projection with <code>antialias</code> and the initial Standard Satellite style.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/" target="_blank" rel="noopener">Map class</a>
+        </div>
+        <div class="card">
+          <code class="api">mapboxgl.accessToken</code>
+          <p>Sets the <b>public</b> access token (<code>pk.*</code>) that authenticates every tile, style, and model request.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/properties/#accesstoken" target="_blank" rel="noopener">accessToken</a>
+        </div>
+        <div class="card">
+          <code class="api">new mapboxgl.NavigationControl()</code>
+          <p>Adds the zoom + compass control (<code>visualizePitch</code>) via <b>map.addControl()</b>.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/markers/#navigationcontrol" target="_blank" rel="noopener">NavigationControl</a>
+        </div>
+        <div class="card">
+          <code class="api">attributionControl</code>
+          <p>Keeps the required Mapbox / OpenStreetMap / Maxar <b>attribution</b> and logo on the map.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/markers/#attributioncontrol" target="_blank" rel="noopener">AttributionControl</a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Styles &amp; the Standard style config</h2>
+      <p class="sec-note">Swapping base styles per route and driving the Standard style's runtime configuration.</p>
+      <div class="grid">
+        <div class="card">
+          <code class="api">map.setStyle()</code>
+          <p>Switches the base map between <b>Standard</b>, <b>Standard Satellite</b>, and <b>Satellite Streets</b> — auto-picked per route type.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/#map#setstyle" target="_blank" rel="noopener">setStyle</a>
+        </div>
+        <div class="card">
+          <code class="api">map.setConfigProperty('basemap', …)</code>
+          <p>Drives the Standard style: <code>lightPreset</code> (dawn/day/dusk/night), <code>show3dObjects</code>, and every label toggle.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/#map#setconfigproperty" target="_blank" rel="noopener">setConfigProperty</a>
+        </div>
+        <div class="card">
+          <code class="api">Mapbox Standard style</code>
+          <p>The 3D-aware base style whose lighting, buildings, and trees respond to the config above.</p>
+          <a class="doc" href="https://docs.mapbox.com/map-styles/standard/guides/" target="_blank" rel="noopener">Standard style guide</a>
+        </div>
+        <div class="card">
+          <code class="api">map.setPaintProperty()</code>
+          <p>Applies live style edits — trail colour/width, the progressive <code>line-trim-offset</code>, and model paint props.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/#map#setpaintproperty" target="_blank" rel="noopener">setPaintProperty</a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>3D terrain</h2>
+      <p class="sec-note">Real elevation under the route, and sampling it so the camera clears the terrain.</p>
+      <div class="grid">
+        <div class="card">
+          <code class="api">map.setTerrain() + raster-dem source</code>
+          <p>Enables 3D terrain from the <b>Mapbox Terrain DEM</b> tileset, with an adjustable exaggeration.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/#map#setterrain" target="_blank" rel="noopener">setTerrain</a>
+        </div>
+        <div class="card">
+          <code class="api">mapbox.mapbox-terrain-dem-v1</code>
+          <p>The raster-DEM tileset that feeds <code>setTerrain</code> the per-pixel ground heights.</p>
+          <a class="doc" href="https://docs.mapbox.com/data/tilesets/reference/mapbox-terrain-dem-v1/" target="_blank" rel="noopener">Terrain DEM v1</a>
+        </div>
+        <div class="card">
+          <code class="api">map.queryTerrainElevation()</code>
+          <p>Sampled <b>every frame</b> at the camera point so the chase camera flies above the terrain instead of clipping through it.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/#map#queryterrainelevation" target="_blank" rel="noopener">queryTerrainElevation</a>
+        </div>
+        <div class="card">
+          <code class="api">sky layer</code>
+          <p>An atmospheric <code>sky</code> layer added for the classic (non-Standard) styles.</p>
+          <a class="doc" href="https://docs.mapbox.com/style-spec/reference/layers/#sky" target="_blank" rel="noopener">sky layer</a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Cinematic camera</h2>
+      <p class="sec-note">The heart of the flyover: a free camera walked along the route each frame.</p>
+      <div class="grid">
+        <div class="card">
+          <code class="api">map.getFreeCameraOptions() / setFreeCameraOptions()</code>
+          <p>The <b>free camera</b> API — each frame we set <code>position</code> and <code>lookAtPoint()</code> to chase the route.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/free-camera/" target="_blank" rel="noopener">FreeCameraOptions</a>
+        </div>
+        <div class="card">
+          <code class="api">mapboxgl.MercatorCoordinate</code>
+          <p><code>fromLngLat(lngLat, altitude)</code> converts a coordinate + height into the mercator position the free camera needs.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/geography/#mercatorcoordinate" target="_blank" rel="noopener">MercatorCoordinate</a>
+        </div>
+        <div class="card">
+          <code class="api">map.fitBounds() + mapboxgl.LngLatBounds</code>
+          <p>Frames the whole route in an intro shot before playback begins.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/#map#fitbounds" target="_blank" rel="noopener">fitBounds</a>
+        </div>
+        <div class="card">
+          <code class="api">map.once('moveend')</code>
+          <p>Kicks off the flyover once the intro <code>fitBounds</code> framing settles.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/#map.event:moveend" target="_blank" rel="noopener">moveend event</a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Route, trail &amp; 3D model layers</h2>
+      <p class="sec-note">The drawn route, its progressive reveal, and the optional glTF avatar riding the head.</p>
+      <div class="grid">
+        <div class="card">
+          <code class="api">map.addSource() / addLayer() — line</code>
+          <p>A GeoJSON source (<code>lineMetrics:true</code>) with ghost / casing / trail <b>line layers</b>.</p>
+          <a class="doc" href="https://docs.mapbox.com/style-spec/reference/layers/#line" target="_blank" rel="noopener">line layer</a>
+        </div>
+        <div class="card">
+          <code class="api">line-trim-offset</code>
+          <p>Reveals only the travelled portion of the trail as the camera advances — the "drawing" effect.</p>
+          <a class="doc" href="https://docs.mapbox.com/style-spec/reference/layers/#paint-line-line-trim-offset" target="_blank" rel="noopener">line-trim-offset</a>
+        </div>
+        <div class="card">
+          <code class="api">model source + model layer</code>
+          <p>A declarative <code>type:'model'</code> source/layer renders the optional glTF avatar (boat / duck).</p>
+          <a class="doc" href="https://docs.mapbox.com/style-spec/reference/sources/#model" target="_blank" rel="noopener">model source</a>
+        </div>
+        <div class="card">
+          <code class="api">source.setModels()</code>
+          <p>Called <b>each frame</b> to move the model to the route head and rotate it to face the direction of travel.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/example/add-3d-model-and-animate-along-route/" target="_blank" rel="noopener">Animate a model along a route</a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Atmosphere, markers &amp; events</h2>
+      <div class="grid">
+        <div class="card">
+          <code class="api">map.setFog()</code>
+          <p>Atmospheric depth haze, horizon colours, and night stars — tuned to the current light preset.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/#map#setfog" target="_blank" rel="noopener">setFog</a>
+        </div>
+        <div class="card">
+          <code class="api">new mapboxgl.Marker()</code>
+          <p>DOM markers for the start / finish pins and the pulsing head marker.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/markers/#marker" target="_blank" rel="noopener">Marker</a>
+        </div>
+        <div class="card">
+          <code class="api">map.on('style.load')</code>
+          <p>Re-applies terrain, config, fog, route + model layers after every style switch.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/#map.event:style.load" target="_blank" rel="noopener">style.load event</a>
+        </div>
+        <div class="card">
+          <code class="api">map.on('error') / map.isStyleLoaded()</code>
+          <p>Error handling and readiness checks that gate layer setup and playback.</p>
+          <a class="doc" href="https://docs.mapbox.com/mapbox-gl-js/api/map/#map#isstyleloaded" target="_blank" rel="noopener">isStyleLoaded</a>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Geometry math (route length, sampling points along the line, bearings) uses
+      <a href="https://turfjs.org/" target="_blank" rel="noopener">Turf.js</a>, which is not a Mapbox
+      API. Requires <b>Mapbox GL JS ≥ 3.19</b> for the model <code>setModels()</code> animation. Full
+      reference: <a href="https://docs.mapbox.com/mapbox-gl-js/api/" target="_blank" rel="noopener">docs.mapbox.com/mapbox-gl-js</a>.
+    </footer>
+  </div>
+</body>
+</html>
