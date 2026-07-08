@@ -37,6 +37,9 @@ camera controls.
 - **Live stats** — distance, duration, and elevation gain, with a **km ↔ mi**
   toggle, plus an interactive **elevation profile** that tracks flyover progress.
 - **Playback** — play / pause / restart / scrub / loop.
+- **In-app API reference** — a docs icon in the panel header opens a page
+  (`docs.html`) listing every Mapbox API the demo uses, with short explanations
+  and links to [docs.mapbox.com](https://docs.mapbox.com/mapbox-gl-js/).
 
 ---
 
@@ -87,13 +90,14 @@ Then open **http://localhost:8000**.
 | **Terrain exaggeration** | Vertical relief multiplier. Auto-seeded higher for mountainous routes. |
 | **Zoom level** | Camera-distance preset (Street-level → Bird's-eye) that sets height + follow distance together. Nudging the fine sliders switches it to "Custom". |
 | **Camera height / follow distance** | Fine control of how high above ground and how far behind the moving point the camera sits (together these set the effective tilt). |
-| **Flyover speed** | Playback speed multiplier (route length also scales the duration). |
+| **Flyover speed** | Playback speed multiplier, **0.1×–3×** (default 1×). Duration scales with route length so longer routes take longer; the default is tuned for a calm, realistic pace — drag down for slower, up for a fast preview. |
 | **Map labels / 3D objects** | Toggle **all** Standard labels (place, POI, road, transit, pedestrian) for a clean cinematic look, and 3D buildings/trees. |
 | **3D model** | Choose an optional glTF avatar to ride the route head (**None / Boat / Duck**). It rests on the surface and turns to face the direction of travel. Defaults to **None** — pick Boat or Duck to enable it on any route. |
 | **Loop** | Restart the flyover automatically when it finishes. |
 | **Units** | Switch stats between km and mi. |
 | **Transport bar** | Scrub, restart, and play/pause; the elevation profile cursor follows along. |
 | **Reset** (panel header) | Restores every setting to its default in one click. Keeps your current route and base-map selection, and re-seeds the smart per-route terrain exaggeration (so an alpine route resets to its higher relief, not a flat default). |
+| **Docs icon** (panel header) | Opens the **Mapbox API reference** for this demo (`docs.html`) in a new tab — every Mapbox API used, grouped and linked to docs.mapbox.com. |
 
 ### Advanced — cinematic (expandable)
 
