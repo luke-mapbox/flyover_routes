@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <title>Flyover — Route Visualiser</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet" />
-  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
   <!-- Local, git-ignored token file: copy config.example.js -> config.js and paste your pk.* token.
        The 404 is harmless if it's missing (you can also use ?access_token=… or localStorage). -->
@@ -242,7 +242,7 @@
       </div>
       <div class="field">
         <label for="speedInp">Flyover speed <span class="val" id="speedVal">1.0×</span></label>
-        <input type="range" id="speedInp" min="0.25" max="3" step="0.05" value="1" />
+        <input type="range" id="speedInp" min="0.1" max="3" step="0.05" value="1" />
       </div>
 
       <div class="divider"></div>
@@ -254,6 +254,11 @@
           <label class="switch"><input type="checkbox" id="objChk" checked><span class="slider"></span></label></div>
         <div class="toggle">Loop flyover
           <label class="switch"><input type="checkbox" id="loopChk" checked><span class="slider"></span></label></div>
+      </div>
+
+      <div class="field">
+        <label for="modelSel">3D model</label>
+        <select id="modelSel"></select>
       </div>
 
       <div class="field">
@@ -364,6 +369,21 @@ const ROUTES = [
   { file:'1344549639_export_gpx.gpx', title:'Jordan Pond & the Bubbles, Acadia',        type:'mountain' },
 ];
 
+// ---- 3D MODEL CATALOG -----------------------------------------------------
+// Optional glTF avatars that ride the route head. A route may name one as its
+// default via `model:'<key>'`; the user can switch/disable it from the dropdown.
+// NOTE: Mapbox GL JS's model loader rejects glTF-Transform-authored files
+// ("offset is out of bounds") — author/convert with another tool (e.g. the
+// ImageToStl converter used for boat2.gltf, or the Khronos sample models).
+// orientation is [x,y,z]° in the model's local frame; z gets the travel heading.
+const MODELS = {
+  none: { label:'None' },
+  // orientation = base tilt to stand upright ([90,0,0] converts glTF Y-up → Mapbox Z-up);
+  // yaw = per-model offset so the model's nose points along the travel heading (calibrated).
+  boat: { label:'Boat',  uri:'boat_model/boat_centered.gltf', scale:6,  orientation:[90,0,0], yaw:90,  emissive:0.5 },
+  duck: { label:'Duck',  uri:'boat_model/Duck.glb',           scale:12, orientation:[0,0,0],  yaw:-90, emissive:0.2 },
+};
+
 const STYLES = {
   'standard-satellite': { url:'mapbox://styles/mapbox/standard-satellite', label:'Standard Satellite (satellite + terrain)', standard:true },
   'standard':           { url:'mapbox://styles/mapbox/standard',           label:'Standard (vector 3D)',                     standard:true },
@@ -391,7 +411,7 @@ const TYPE_DEFAULTS = {
 const DEFAULT_CFG = {
   color:'#FFD200', width:6, exag:1.4,
   height:320, follow:260, speed:1,
-  light:'day', labels:true, objects:true,
+  light:'day', labels:true, objects:true, modelKey:'none',
   // advanced / cinematic
   pacing:'even', smoothing:0, lookAhead:0, orbit:0, fog:true, haze:0.4,
   ease:true, lockInteraction:true,
@@ -567,7 +587,9 @@ async function selectRouteByFile(file){
     if(!res.ok) throw new Error('HTTP '+res.status);
     const txt = await res.text();
     const parsed = parseGpx(txt);
-    loadRoute(buildRoute(parsed, meta?meta.title:(parsed.name||file), meta?meta.type:'outdoor'));
+    const route = buildRoute(parsed, meta?meta.title:(parsed.name||file), meta?meta.type:'outdoor');
+    route.model = (meta && meta.model) || null;   // optional 3D avatar descriptor from the manifest
+    loadRoute(route);
     hideToast();
   }catch(err){
     toast('Could not fetch '+file+'. Serve over http (python3 -m http.server) or use “upload a .gpx file”.', 5200);
@@ -594,6 +616,8 @@ function loadRoute(route){
   document.getElementById('routeTitle').textContent = route.title;
   const badge = document.getElementById('routeBadge');
   badge.textContent = route.type; badge.style.display='inline-block';
+  state.cfg.modelKey = (route.model && MODELS[route.model]) ? route.model : 'none';
+  syncModelSelect();
   renderStats(); drawElevation();
   state.phase = 0; updateScrub();
 
@@ -618,6 +642,7 @@ function switchStyle(key, after){
 
 // ---- 7. ROUTE LAYERS + MARKERS -------------------------------------------
 function removeRouteLayers(){
+  removeModelLayer();
   ['route-main','route-casing','route-ghost'].forEach(id=>{ if(map.getLayer(id)) map.removeLayer(id); });
   if(map.getSource('route')) map.removeSource('route');
   [state.headMarker,state.startMarker,state.finishMarker].forEach(m=>{ if(m) m.remove(); });
@@ -651,6 +676,7 @@ function addRouteLayers(){
   state.headMarker = new mapboxgl.Marker({element:head}).setLngLat(start).addTo(map);
 
   applyLineStyle();
+  addModelLayer();
 }
 
 function applyLineStyle(){
@@ -662,10 +688,75 @@ function applyLineStyle(){
   map.setPaintProperty('route-ghost','line-width',state.cfg.width);
 }
 
+// ---- optional 3D model (native model layer that rides the route head) ------
+// Uses a declarative `model` source (a named model with uri/position/orientation)
+// and mutates it every frame with source.setModels(...) — the pattern from the
+// Mapbox "animate a model along a route" example. Requires GL JS v3.19+.
+const MODEL_ID = 'avatar';   // key inside the model source's `models` object
+// the currently selected model descriptor (from the MODELS catalog), or null for "none"
+function routeModel(){ const k = state.cfg.modelKey; return (k && k!=='none' && MODELS[k] && MODELS[k].uri) ? MODELS[k] : null; }
+function modelActive(){ return !!routeModel(); }
+
+// base orientation (fixes on-its-side export) + optional yaw offset + travel heading,
+// all folded into the up (z) axis. orientation is [x,y,z] degrees in the model frame.
+function modelOrientation(heading){
+  const m = routeModel(); const o = (m && m.orientation) || [0,0,0];
+  return [ o[0], o[1], o[2] + (heading||0) + ((m && m.yaw) || 0) ];
+}
+// a model source needs an ABSOLUTE uri (relative paths throw "Invalid base URL")
+function modelUri(){ const m = routeModel(); return m ? new URL(m.uri, document.baseURI).href : ''; }
+function modelSpec(coord, heading){
+  return { [MODEL_ID]: { uri: modelUri(), position:[coord[0], coord[1]], orientation: modelOrientation(heading) } };
+}
+function modelEmissive(){
+  const m = routeModel(); const base = (m && m.emissive) || 0;
+  if(state.cfg.light==='night') return Math.max(base, 2.5);
+  if(state.cfg.light==='dusk' || state.cfg.light==='dawn') return Math.max(base, 1.2);
+  return base;
+}
+
+function removeModelLayer(){
+  if(map.getLayer && map.getLayer('route-model')) map.removeLayer('route-model');
+  if(map.getSource && map.getSource('route-model')) map.removeSource('route-model');
+}
+
+function addModelLayer(){
+  removeModelLayer();
+  const m = routeModel();
+  if(!m || !state.route) return;
+  const s = m.scale || 1;
+  try{
+    map.addSource('route-model', { type:'model', models: modelSpec(state.route.coords[0], 0) });
+    map.addLayer({
+      id:'route-model', type:'model', source:'route-model',
+      paint:{
+        'model-scale':[s,s,s],
+        'model-emissive-strength': modelEmissive(),
+        'model-opacity': 1,
+      },
+    });
+  }catch(e){
+    console.warn('3D model layer failed to load:', e && e.message);
+    removeModelLayer();
+    state.cfg.modelKey = 'none';   // fall back to the DOM head marker
+  }
+}
+
+// per-frame: move + re-aim the boat, and hide the DOM head marker while it's on
+function updateModel(coord, heading){
+  const src = modelActive() && map.getSource('route-model');
+  if(src && src.setModels){
+    src.setModels(modelSpec(coord, heading));
+    if(state.headMarker) state.headMarker.getElement().style.display='none';
+  } else if(state.headMarker){
+    state.headMarker.getElement().style.display='';
+  }
+}
+
 // ---- 8. CAMERA + ANIMATION -----------------------------------------------
 function durationMs(){
   const km = state.route ? state.route.lengthKm : 5;
-  const base = Math.min(45000, Math.max(12000, km*3500));
+  const base = Math.min(240000, Math.max(15000, km*8000));  // ~8s/km, clamp 15s–240s
   return base / state.cfg.speed;
 }
 
@@ -731,6 +822,15 @@ function renderAt(phase){
   if(map.getLayer('route-casing')) map.setPaintProperty('route-casing','line-trim-offset', trim);
 
   if(state.headMarker) state.headMarker.setLngLat(center);
+
+  // optional 3D model: sit it at the current point, aimed along the route tangent
+  if(modelActive()){
+    const back = turf.along(feat, Math.max(0, centerDist-0.02), {units:'kilometers'}).geometry.coordinates;
+    const fwd  = turf.along(feat, Math.min(total, centerDist+0.02), {units:'kilometers'}).geometry.coordinates;
+    const heading = turf.bearing(turf.point(back), turf.point(fwd));   // compass degrees along travel
+    updateModel(center, heading);
+  } else { updateModel(center, 0); }
+
   updateElevationCursor(df);
 }
 
@@ -846,9 +946,14 @@ styleSel.value=state.styleKey;
 routeSel.addEventListener('change', e=> selectRouteByFile(e.target.value));
 styleSel.addEventListener('change', e=>{ switchStyle(e.target.value, ()=>{ renderAt(state.phase); }); });
 
-document.getElementById('lightSel').addEventListener('change', e=>{ state.cfg.light=e.target.value; applyBasemapConfig(); });
+document.getElementById('lightSel').addEventListener('change', e=>{ state.cfg.light=e.target.value; applyBasemapConfig();
+  if(map.getLayer('route-model')) map.setPaintProperty('route-model','model-emissive-strength', modelEmissive()); });
 document.getElementById('labelsChk').addEventListener('change', e=>{ state.cfg.labels=e.target.checked; applyBasemapConfig(); });
 document.getElementById('objChk').addEventListener('change', e=>{ state.cfg.objects=e.target.checked; applyBasemapConfig(); });
+const modelSel=document.getElementById('modelSel');
+Object.entries(MODELS).forEach(([k,v])=>{ const o=document.createElement('option'); o.value=k; o.textContent=v.label; modelSel.appendChild(o); });
+modelSel.addEventListener('change', e=>{ state.cfg.modelKey=e.target.value; addModelLayer(); renderAt(state.phase); });
+function syncModelSelect(){ modelSel.value = state.cfg.modelKey || 'none'; }
 document.getElementById('loopChk').addEventListener('change', e=>{ state.loop=e.target.checked; });
 
 const colorInp=document.getElementById('colorInp');
@@ -893,6 +998,7 @@ function syncUI(){
   document.getElementById('lightSel').value=c.light;
   document.getElementById('labelsChk').checked=c.labels;
   document.getElementById('objChk').checked=c.objects;
+  syncModelSelect();
   document.getElementById('loopChk').checked=state.loop;
   colorInp.value=c.color;
   widthInp.value=c.width; document.getElementById('widthVal').textContent=(+c.width).toFixed(1).replace(/\.0$/,'');
@@ -912,9 +1018,12 @@ function syncUI(){
 
 function resetConfig(){
   state.cfg={...DEFAULT_CFG}; state.units='metric'; state.loop=true;
-  if(state.route) state.cfg.exag=seedExag(state.route);   // keep the smart per-route terrain default
+  if(state.route){
+    state.cfg.exag=seedExag(state.route);   // keep the smart per-route terrain default
+    state.cfg.modelKey = (state.route.model && MODELS[state.route.model]) ? state.route.model : 'none';
+  }
   syncUI();
-  applyLineStyle(); applyFog(); applyBasemapConfig();
+  applyLineStyle(); applyFog(); applyBasemapConfig(); addModelLayer();
   setInteractive(!(state.playing && state.cfg.lockInteraction));
   renderStats();
   if(!state.playing) renderAt(state.phase);

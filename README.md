@@ -23,6 +23,11 @@ camera controls.
 - **Progressive trail** — the yellow route line draws in as the camera advances
   (`line-trim-offset`), over a faint full-route "ghost" preview, with start /
   finish pins and a pulsing head marker.
+- **Optional 3D model avatar** — a glTF model (e.g. a **boat** or a **duck**) can
+  ride the route head, sitting on the surface and turning to face the direction of
+  travel. It's **off by default**; pick one from the **3D model** dropdown
+  (native Mapbox `model` layer, animated with `setModels` each frame). Selecting
+  it replaces the pulsing head marker; "None" restores it.
 - **9 bundled routes** — a deliberate mix of terrain: Paris city rides/runs, a
   Rome stroll, Fontainebleau forest, a Dutch waterway, and alpine hikes
   (Mt Rainier ×2, Acadia, Melbourne's 1000 Steps).
@@ -84,6 +89,7 @@ Then open **http://localhost:8000**.
 | **Camera height / follow distance** | Fine control of how high above ground and how far behind the moving point the camera sits (together these set the effective tilt). |
 | **Flyover speed** | Playback speed multiplier (route length also scales the duration). |
 | **Map labels / 3D objects** | Toggle **all** Standard labels (place, POI, road, transit, pedestrian) for a clean cinematic look, and 3D buildings/trees. |
+| **3D model** | Choose an optional glTF avatar to ride the route head (**None / Boat / Duck**). It rests on the surface and turns to face the direction of travel. Defaults to **None** — pick Boat or Duck to enable it on any route. |
 | **Loop** | Restart the flyover automatically when it finishes. |
 | **Units** | Switch stats between km and mi. |
 | **Transport bar** | Scrub, restart, and play/pause; the elevation profile cursor follows along. |
@@ -130,7 +136,16 @@ Everything lives in **`index.html`** — no build step. Mapbox GL JS and
    the free camera above the terrain, aims it at the target, and updates the trail
    trim, head marker, and elevation cursor. During playback `setInteractive(false)`
    locks map gestures so they can't fight the scripted camera.
-6. **UI** — the config panel and HUD are plain DOM; changes update `state.cfg`
+6. **3D model avatar** (optional) — a native Mapbox `model` layer fed by a
+   declarative `model` source. Every frame, `updateModel()` calls
+   `source.setModels({ avatar: { uri, position, orientation } })` to move the
+   model to the route head and set its heading (the
+   [animate-a-model-along-a-route](https://docs.mapbox.com/mapbox-gl-js/example/add-3d-model-and-animate-along-route/)
+   pattern). `orientation` is `[x,y,z]°`: a base tilt stands the model upright
+   (glTF is Y-up, Mapbox is Z-up → `[90,0,0]`) and the travel heading plus a
+   per-model `yaw` offset go on the z (up) axis so the nose points along travel.
+   This needs **Mapbox GL JS ≥ 3.19** — `setModels` does not exist on older 3.x.
+7. **UI** — the config panel and HUD are plain DOM; changes update `state.cfg`
    and re-apply live. Defaults live in one `DEFAULT_CFG` object; **Reset** restores
    from it and `syncUI()` pushes the whole config back into every control.
 
@@ -146,6 +161,53 @@ Drop new `.gpx` files into `gpx/` and add an entry to the `ROUTES` array in
 `type` (`mountain` | `outdoor` | `city` | `water`) chooses the default base
 style and seeds the terrain exaggeration. Any `.gpx` can also be loaded
 ad-hoc via the upload / drag-and-drop fallback without editing the manifest.
+
+To give a route a default 3D model, add `model:'<key>'` referencing a
+`MODELS` entry (see below):
+
+```js
+{ file:'my_waterway.gpx', title:'My Waterway', type:'water', model:'boat' },
+```
+
+### Adding / changing 3D models
+
+Models are defined in the `MODELS` catalog in `index.html` and appear in the
+**3D model** dropdown automatically:
+
+```js
+const MODELS = {
+  none: { label:'None' },
+  boat: { label:'Boat', uri:'boat_model/boat_centered.gltf', scale:6,  orientation:[90,0,0], yaw:90,  emissive:0.5 },
+  duck: { label:'Duck', uri:'boat_model/Duck.glb',           scale:12, orientation:[0,0,0],  yaw:-90, emissive:0.2 },
+};
+```
+
+- **`scale`** — uniform scale. Real-world-metre models look tiny from the
+  flyover camera, so these are enlarged for visibility (boat ≈ 6, duck ≈ 12).
+- **`orientation`** — `[x,y,z]°` base rotation to stand the model upright.
+  Most glTF models are Y-up, so `[90,0,0]` (Mapbox is Z-up). A model exported
+  already Z-up (e.g. the sample Duck) uses `[0,0,0]`.
+- **`yaw`** — degrees added to the travel heading on the z axis so the model's
+  **nose points along the direction of travel**. Calibrate by eye: if the nose
+  points 90° clockwise of travel, use `yaw:-90`; anticlockwise, `yaw:+90`.
+- **`emissive`** — base `model-emissive-strength`; auto-boosted at dusk/night.
+
+> ⚠️ **Asset compatibility — important.** Mapbox GL JS's model loader **rejects
+> glTF files authored by [glTF-Transform](https://gltf-transform.dev/)** with
+> `Could not load model … offset is out of bounds`, even though the files are
+> spec-valid. Re-encoding through glTF-Transform (or gltf-pipeline) does **not**
+> fix it. Author/convert models with a **different** tool — e.g. Blender's glTF
+> exporter, the Khronos sample models, or an online converter (the bundled
+> `boat2.gltf` came from ImageToStl.com). `boat_centered.gltf` is `boat2.gltf`
+> with a root-node `translation` added (a pure JSON edit — buffers untouched, so
+> it stays compatible) to move the model's origin to its centroid so it sits
+> **centered** on the route point instead of offset. The unused
+> `boat_model/boat_model.gltf` (+ `buffer.bin`) is the original glTF-Transform
+> export kept for reference — it will **not** load.
+
+Model URIs are resolved to absolute URLs at runtime (a Mapbox `model` source
+rejects relative paths), so a plain repo-relative path like above works when the
+page is served over http.
 
 ---
 
